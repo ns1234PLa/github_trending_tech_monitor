@@ -2,12 +2,11 @@ name: Daily GitHub Tech Stack Ingestion
 
 on:
   schedule:
-    # Runs automatically at 21:17 UTC (2:47 AM IST) every day
     - cron: '17 21 * * *'
-  workflow_dispatch: # Allows manual trigger from Actions tab
+  workflow_dispatch: 
 
 permissions:
-  contents: write # Required so the bot can commit and push back to main
+  contents: write
 
 jobs:
   run-etl:

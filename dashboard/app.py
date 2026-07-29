@@ -117,11 +117,18 @@ with tab1:
         categories = ["All Categories"] + list(latest_tech["category"].unique())
         selected_category = st.sidebar.selectbox("Filter Category", categories)
 
+        # Metric Display Mode Toggle
+        chart_mode = st.sidebar.radio(
+            "📈 Trajectory Chart Metric",
+            ["% Growth Since Baseline", "Absolute Repositories"],
+            help="Switch to % Growth to compare high-velocity emerging tools alongside large legacy ecosystems."
+        )
+
         use_log_scale = st.sidebar.checkbox(
             "Logarithmic Scale", 
             value=False,
-            help="Enable to compare smaller high-growth tech alongside giant ecosystems."
-        )
+            help="Enable to compare smaller high-growth tech alongside giant ecosystems in absolute count mode."
+        ) if chart_mode == "Absolute Repositories" else False
 
         filtered_tech = latest_tech if selected_category == "All Categories" else latest_tech[latest_tech["category"] == selected_category]
         filtered_time_series = tech_df if selected_category == "All Categories" else tech_df[tech_df["category"] == selected_category]
@@ -174,19 +181,36 @@ with tab1:
         st.subheader("📈 Adoption Trajectory Over Time (Time-Series)")
         
         time_df = filtered_time_series.sort_values(by="snapshot_date").copy()
+
+        # Calculate percentage growth baseline if toggled
+        if chart_mode == "% Growth Since Baseline":
+            # Find baseline count per tech_name on its earliest recorded date
+            baselines = time_df.groupby("tech_name")["repo_count"].transform("first")
+            time_df["display_metric"] = ((time_df["repo_count"] - baselines) / baselines) * 100
+            y_axis_label = "Growth Velocity (%)"
+            title_text = "Relative Growth Velocity (% Change from Baseline)"
+        else:
+            time_df["display_metric"] = time_df["repo_count"]
+            y_axis_label = "Total Repositories"
+            title_text = "Repository Volume (Click legends to toggle technologies)"
+
         time_df["snapshot_date_str"] = time_df["snapshot_date"].astype(str)
 
         fig_line = px.line(
             time_df,
             x="snapshot_date_str",
-            y="repo_count",
+            y="display_metric",
             color="tech_name",
             markers=True,
             log_y=use_log_scale,
-            labels={"snapshot_date_str": "Date", "repo_count": "Total Repositories", "tech_name": "Technology"},
-            title="Repository Growth Velocity (Click legends to toggle technologies)",
+            labels={"snapshot_date_str": "Date", "display_metric": y_axis_label, "tech_name": "Technology"},
+            title=title_text,
             color_discrete_sequence=px.colors.qualitative.Bold
         )
+
+        if chart_mode == "% Growth Since Baseline":
+            fig_line.update_traces(hovertemplate="%{y:.2f}% growth on %{x}")
+
         fig_line.update_layout(
             height=420,
             paper_bgcolor="rgba(0,0,0,0)",

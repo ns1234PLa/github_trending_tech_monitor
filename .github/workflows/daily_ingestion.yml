@@ -37,14 +37,12 @@ jobs:
 
       - name: Commit and Push Changes
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "ns1234PLa"
+          git config --global user.email "naykodisamruddhi@gmail.com"
           git add .
           if [ -n "$(git status --porcelain)" ]; then
-            echo "Changes detected! Committing..."
-            git status
             git commit -m "auto: update trending tech data"
             git push origin main
           else
-            echo "No changes detected in the workspace. Python script did not modify local files."
+            echo "No changes to commit"
           fi

@@ -39,11 +39,7 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Stage files
           git add .
-          
-          # Check if git sees any changes
           if [ -n "$(git status --porcelain)" ]; then
             echo "Changes detected! Committing..."
             git status

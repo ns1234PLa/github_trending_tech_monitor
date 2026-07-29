@@ -39,6 +39,16 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Stage files
           git add .
-          # Only commits if local files were modified/created by python script
-          git diff --quiet && git diff --staged --quiet || (git commit -m "auto: update trending tech data" && git push)
+          
+          # Check if git sees any changes
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Changes detected! Committing..."
+            git status
+            git commit -m "auto: update trending tech data"
+            git push origin main
+          else
+            echo "No changes detected in the workspace. Python script did not modify local files."
+          fi

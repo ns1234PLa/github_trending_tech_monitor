@@ -102,6 +102,20 @@ def load_breakout_repos():
         st.error(f"Error fetching breakout repositories: {e}")
         return pd.DataFrame()
 
+@st.cache_data(ttl=1800)
+def load_emerging_topics():
+    """Fetch Pillar 3 dynamically harvested topics with date normalization."""
+    try:
+        response = supabase.table("emerging_topics").select("*").execute()
+        if not response.data:
+            return pd.DataFrame()
+        df = pd.DataFrame(response.data)
+        df["snapshot_date"] = pd.to_datetime(df["snapshot_date"]).dt.date
+        return df
+    except Exception as e:
+        st.error(f"Error fetching emerging topics: {e}")
+        return pd.DataFrame()
+
 def calculate_growth_metrics(df):
     today = df["snapshot_date"].max()
     month_ago = today - timedelta(days=30)
@@ -192,8 +206,9 @@ st.markdown("Open-source telemetry tracking developer adoption, skill saturation
 
 tech_df = load_tech_trends()
 breakout_df = load_breakout_repos()
+topics_df = load_emerging_topics()
 
-tab1, tab2 = st.tabs(["Ecosystem Market Trends", "Breakout Repositories"])
+tab1, tab2, tab3 = st.tabs(["Ecosystem Market Trends", "Breakout Repositories", "Emerging Signals & Dynamic Discovery"])
 
 # ==========================================
 # TAB 1: CORE TECH STACKS
@@ -524,6 +539,91 @@ with tab2:
                 "primary_language": "Language",
                 "html_url": st.column_config.LinkColumn("GitHub Link", display_text="View Link"),
                 "description": "Description"
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+
+# ==========================================
+# TAB 3: DYNAMIC TOPICS & EMERGING SIGNALS
+# ==========================================
+with tab3:
+    st.subheader("Dynamic Topic Discovery Engine")
+    st.markdown("Non-tracked frameworks, tags, and tools automatically harvested from viral repositories in real-time.")
+
+    if topics_df.empty:
+        st.info("No dynamic topic signals recorded yet. Run `python scripts/fetch_github_data.py` to harvest emerging tags!")
+    else:
+        latest_topic_date = topics_df["snapshot_date"].max()
+        latest_topics = topics_df[topics_df["snapshot_date"] == latest_topic_date].copy()
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-title">Discovered Tags Today</div>
+                <div class="metric-value">{len(latest_topics)}</div>
+                <div class="metric-delta">Unsupervised Topic Ingestion</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-title">Top Tag by Prevalence</div>
+                <div class="metric-value">{latest_topics.sort_values(by='repo_count', ascending=False).iloc[0]['topic_name']}</div>
+                <div class="metric-delta">{latest_topics['repo_count'].max()} Viral Repositories</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c3:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-title">Highest Traction Tag</div>
+                <div class="metric-value">{latest_topics.sort_values(by='avg_stars', ascending=False).iloc[0]['topic_name']}</div>
+                <div class="metric-delta">{latest_topics['avg_stars'].max():,} Avg Stars</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.divider()
+
+        st.subheader("Emerging Tag Radar: Project Prevalence vs. Traction")
+        fig_topic_scatter = px.scatter(
+            latest_topics,
+            x="repo_count",
+            y="avg_stars",
+            size="avg_stars",
+            text="topic_name",
+            hover_name="topic_name",
+            labels={"repo_count": "Number of Viral Repos Featuring Tag", "avg_stars": "Average Project Stars"},
+            color="avg_stars",
+            color_continuous_scale="Viridis"
+        )
+        fig_topic_scatter.update_traces(textposition="top center")
+        fig_topic_scatter.update_layout(
+            height=450,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#f0f6fc"),
+            xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+            yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+            margin=dict(l=0, r=0, t=30, b=0)
+        )
+        st.plotly_chart(fig_topic_scatter, use_container_width=True)
+
+        st.divider()
+
+        st.subheader("Auto-Discovered Emerging Topic Signals")
+        display_topics = latest_topics.sort_values(by="avg_stars", ascending=False)[
+            ["topic_name", "category", "repo_count", "avg_stars", "snapshot_date"]
+        ]
+
+        st.dataframe(
+            display_topics,
+            column_config={
+                "topic_name": "Discovered Tag / Framework",
+                "category": "Classification",
+                "repo_count": st.column_config.ProgressColumn("Project Prevalence", format="%d repos", min_value=1, max_value=int(latest_topics["repo_count"].max() or 10)),
+                "avg_stars": st.column_config.NumberColumn("Avg Project Traction (Stars)", format="%d ⭐"),
+                "snapshot_date": "Snapshot Date"
             },
             use_container_width=True,
             hide_index=True

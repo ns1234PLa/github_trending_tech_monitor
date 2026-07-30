@@ -1,55 +1,59 @@
 import os
-import streamlit as st
+from datetime import datetime, timedelta
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
 from dotenv import load_dotenv
-from supabase import create_client, Client
+from supabase import Client, create_client
 
-# Page layout setup
 st.set_page_config(
     page_title="TechPulse • GitHub Market Intelligence",
-    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS Injection for Commercial Dark Theme UI
 st.markdown("""
 <style>
-    /* Dark Theme Custom Styling */
     .stApp {
         background-color: #0e1117;
     }
     .metric-card {
         background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%);
         border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 12px;
-        padding: 20px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     }
     .metric-title {
         color: #8b949e;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
     .metric-value {
         color: #f0f6fc;
-        font-size: 1.8rem;
+        font-size: 1.6rem;
         font-weight: 700;
-        margin-top: 5px;
+        margin-top: 4px;
     }
     .metric-delta {
         color: #3fb950;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         margin-top: 4px;
         font-weight: 500;
+    }
+    .insight-box {
+        background: rgba(56, 139, 253, 0.1);
+        border-left: 3px solid #58a6ff;
+        padding: 12px;
+        border-radius: 4px;
+        margin: 8px 0;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Load environment variables
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -66,223 +70,400 @@ supabase = init_supabase()
 
 @st.cache_data(ttl=1800)
 def load_tech_trends():
-    """Fetch core tech stack metrics with date normalization to fix x-axis zoom bugs."""
-    response = supabase.table("tech_trends").select("*").execute()
-    if not response.data:
-        return pd.DataFrame()
-    df = pd.DataFrame(response.data)
-    
-    # Strictly parse snapshot_date as YYYY-MM-DD calendar dates
-    df["snapshot_date"] = pd.to_datetime(df["snapshot_date"]).dt.date
-    
-    # Deduplicate multiple daily runs by keeping the latest entry per tech per day
-    if "created_at" in df.columns:
-        df = df.sort_values(by="created_at").groupby(["snapshot_date", "tech_name"]).last().reset_index()
-    else:
-        df = df.groupby(["snapshot_date", "tech_name"]).last().reset_index()
+    """Fetch core tech stack metrics with date normalization."""
+    try:
+        response = supabase.table("tech_trends").select("*").execute()
+        if not response.data:
+            return pd.DataFrame()
+        df = pd.DataFrame(response.data)
+        df["snapshot_date"] = pd.to_datetime(df["snapshot_date"]).dt.date
         
-    return df
+        if "created_at" in df.columns:
+            df = df.sort_values(by="created_at").groupby(["snapshot_date", "tech_name"]).last().reset_index()
+        else:
+            df = df.groupby(["snapshot_date", "tech_name"]).last().reset_index()
+            
+        return df
+    except Exception as e:
+        st.error(f"Error fetching telemetry data: {e}")
+        return pd.DataFrame()
 
 @st.cache_data(ttl=1800)
 def load_breakout_repos():
     """Fetch breakout projects with date normalization."""
-    response = supabase.table("trending_repos").select("*").execute()
-    if not response.data:
+    try:
+        response = supabase.table("trending_repos").select("*").execute()
+        if not response.data:
+            return pd.DataFrame()
+        df = pd.DataFrame(response.data)
+        df["snapshot_date"] = pd.to_datetime(df["snapshot_date"]).dt.date
+        return df
+    except Exception as e:
+        st.error(f"Error fetching breakout repositories: {e}")
         return pd.DataFrame()
-    df = pd.DataFrame(response.data)
-    df["snapshot_date"] = pd.to_datetime(df["snapshot_date"]).dt.date
-    return df
 
-# Header Banner
-st.title("⚡ TechPulse Market Intelligence")
-st.markdown("Real-time open-source telemetry tracking developer adoption, framework market share, and breakout velocity.")
+def calculate_growth_metrics(df):
+    today = df["snapshot_date"].max()
+    month_ago = today - timedelta(days=30)
+    year_ago = today - timedelta(days=365)
+    
+    metrics = []
+    for tech in df["tech_name"].unique():
+        tech_data = df[df["tech_name"] == tech].sort_values("snapshot_date")
+        
+        latest = tech_data[tech_data["snapshot_date"] == today]["repo_count"].values
+        latest_count = latest[0] if len(latest) > 0 else 0
+        
+        month_ago_data = tech_data[tech_data["snapshot_date"] <= month_ago].sort_values("snapshot_date")
+        month_ago_count = month_ago_data["repo_count"].values[-1] if len(month_ago_data) > 0 else 0
+        
+        year_ago_data = tech_data[tech_data["snapshot_date"] <= year_ago].sort_values("snapshot_date")
+        year_ago_count = year_ago_data["repo_count"].values[-1] if len(year_ago_data) > 0 else 0
+        
+        mom_growth = ((latest_count - month_ago_count) / month_ago_count * 100) if month_ago_count > 0 else 0
+        yoy_growth = ((latest_count - year_ago_count) / year_ago_count * 100) if year_ago_count > 0 else 0
+        
+        metrics.append({
+            "tech_name": tech,
+            "latest_count": latest_count,
+            "mom_growth": mom_growth,
+            "yoy_growth": yoy_growth
+        })
+    
+    return pd.DataFrame(metrics)
+
+def assign_maturity_phase(growth_rate, latest_count, all_counts_max):
+    if growth_rate > 20:
+        return "Emerging"
+    elif growth_rate > 10:
+        return "High Growth"
+    elif latest_count > all_counts_max * 0.3:
+        return "Mature"
+    else:
+        return "Niche"
+
+def get_saturation_quadrant(growth_df, latest_tech_df):
+    merged = growth_df.merge(
+        latest_tech_df[["tech_name", "repo_count", "category"]],
+        on="tech_name",
+        how="left"
+    )
+    
+    merged["repo_count"] = merged["repo_count"].fillna(0)
+    merged["mom_growth"] = merged["mom_growth"].fillna(0)
+    
+    growth_median = merged["mom_growth"].median()
+    volume_median = merged["repo_count"].median()
+    
+    def assign_quadrant(row):
+        if row["mom_growth"] >= growth_median and row["repo_count"] >= volume_median:
+            return "High Growth, High Volume (Explosive Demand)"
+        elif row["mom_growth"] >= growth_median and row["repo_count"] < volume_median:
+            return "High Growth, Low Volume (Emerging Skill)"
+        elif row["mom_growth"] < growth_median and row["repo_count"] >= volume_median:
+            return "Low Growth, High Volume (Established Stacks)"
+        else:
+            return "Low Growth, Low Volume (Specialized/Niche)"
+    
+    merged["quadrant"] = merged.apply(assign_quadrant, axis=1)
+    return merged
+
+def find_emerging_skill_combos(breakout_df, top_n=5):
+    latest_breakout_date = breakout_df["snapshot_date"].max()
+    latest_breakouts = breakout_df[breakout_df["snapshot_date"] == latest_breakout_date].copy()
+    
+    top_repos = latest_breakouts.nlargest(20, "stars")
+    lang_counts = top_repos["primary_language"].value_counts().head(top_n)
+    
+    combos = []
+    for lang in lang_counts.index:
+        growth_rate = (lang_counts[lang] / len(top_repos)) * 100
+        combos.append({
+            "combo": f"{lang} Projects",
+            "prevalence": lang_counts[lang],
+            "pct_of_top": growth_rate
+        })
+    
+    return pd.DataFrame(combos)
+
+
+st.title("TechPulse Market Intelligence")
+st.markdown("Open-source telemetry tracking developer adoption, skill saturation, and framework growth trajectories.")
 
 tech_df = load_tech_trends()
 breakout_df = load_breakout_repos()
 
-tab1, tab2 = st.tabs(["📊 Ecosystem Market Trends", "🔥 Dynamic Breakout Repos"])
+tab1, tab2 = st.tabs(["Ecosystem Market Trends", "Breakout Repositories"])
 
 # ==========================================
 # TAB 1: CORE TECH STACKS
 # ==========================================
 with tab1:
     if tech_df.empty:
-        st.warning("⚠️ No tech stack data found in Supabase!")
+        st.warning("No tech stack telemetry data available.")
     else:
         latest_date = tech_df["snapshot_date"].max()
         latest_tech = tech_df[tech_df["snapshot_date"] == latest_date].copy()
 
-        # Sidebar Filters
-        st.sidebar.header("🎛️ Market Filters")
+        st.sidebar.header("Market Filters")
         categories = ["All Categories"] + list(latest_tech["category"].unique())
         selected_category = st.sidebar.selectbox("Filter Category", categories)
+
+        chart_mode = st.sidebar.radio(
+            "Trajectory Metric Mode",
+            ["% Growth Since Baseline", "Absolute Repositories"],
+            help="Switch to % Growth to compare high-velocity emerging tools alongside large ecosystems."
+        )
 
         use_log_scale = st.sidebar.checkbox(
             "Logarithmic Scale", 
             value=False,
-            help="Enable to compare smaller high-growth tech alongside giant ecosystems."
-        )
+            help="Enable to compare smaller high-growth technologies alongside large ecosystems."
+        ) if chart_mode == "Absolute Repositories" else False
 
         filtered_tech = latest_tech if selected_category == "All Categories" else latest_tech[latest_tech["category"] == selected_category]
         filtered_time_series = tech_df if selected_category == "All Categories" else tech_df[tech_df["category"] == selected_category]
 
-        # Styled KPI Cards
-        total_repos = filtered_tech['repo_count'].sum()
-        top_tech = filtered_tech.sort_values(by='repo_count', ascending=False).iloc[0]
+        if filtered_tech.empty:
+            st.info("No data available for the selected category.")
+        else:
+            total_repos = filtered_tech['repo_count'].sum()
+            top_tech = filtered_tech.sort_values(by='repo_count', ascending=False).iloc[0]
 
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-title">Tracked Tech Stacks</div>
-                <div class="metric-value">{len(filtered_tech)}</div>
-                <div class="metric-delta">Active Monitoring</div>
-            </div>
-            """, unsafe_allow_html=True)
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Tracked Technologies</div>
+                    <div class="metric-value">{len(filtered_tech)}</div>
+                    <div class="metric-delta">Active Monitoring</div>
+                </div>
+                """, unsafe_allow_html=True)
 
-        with col2:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-title">Total Ecosystem Volume</div>
-                <div class="metric-value">{total_repos:,}</div>
-                <div class="metric-delta">Public Repositories</div>
-            </div>
-            """, unsafe_allow_html=True)
+            with col2:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Total Repository Volume</div>
+                    <div class="metric-value">{total_repos:,}</div>
+                    <div class="metric-delta">Public Repositories</div>
+                </div>
+                """, unsafe_allow_html=True)
 
-        with col3:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-title">Dominant Category Leader</div>
-                <div class="metric-value">{top_tech['tech_name']}</div>
-                <div class="metric-delta">🏆 {top_tech['repo_count']:,} repos</div>
-            </div>
-            """, unsafe_allow_html=True)
+            with col3:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Category Leader</div>
+                    <div class="metric-value">{top_tech['tech_name']}</div>
+                    <div class="metric-delta">{top_tech['repo_count']:,} Repositories</div>
+                </div>
+                """, unsafe_allow_html=True)
 
-        with col4:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-title">Latest Telemetry Date</div>
-                <div class="metric-value">{latest_date.strftime('%b %d, %Y')}</div>
-                <div class="metric-delta">Live Supabase Sync</div>
-            </div>
-            """, unsafe_allow_html=True)
+            with col4:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Telemetry Snapshot Date</div>
+                    <div class="metric-value">{latest_date.strftime('%b %d, %Y')}</div>
+                    <div class="metric-delta">Live Sync</div>
+                </div>
+                """, unsafe_allow_html=True)
 
-        st.divider()
+            st.divider()
 
-        # --- 📈 MULTI-LINE TIME-SERIES CHART ---
-        st.subheader("📈 Adoption Trajectory Over Time (Time-Series)")
-        
-        time_df = filtered_time_series.sort_values(by="snapshot_date").copy()
-        time_df["snapshot_date_str"] = time_df["snapshot_date"].astype(str)
-
-        fig_line = px.line(
-            time_df,
-            x="snapshot_date_str",
-            y="repo_count",
-            color="tech_name",
-            markers=True,
-            log_y=use_log_scale,
-            labels={"snapshot_date_str": "Date", "repo_count": "Total Repositories", "tech_name": "Technology"},
-            title="Repository Growth Velocity (Click legends to toggle technologies)",
-            color_discrete_sequence=px.colors.qualitative.Bold
-        )
-        fig_line.update_layout(
-            height=420,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#f0f6fc"),
-            xaxis=dict(type="category", showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
-            yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
-            margin=dict(l=0, r=0, t=30, b=0)
-        )
-        st.plotly_chart(fig_line, use_container_width=True)
-
-        st.divider()
-
-        # Bar Chart & Pie Chart Row
-        col_left, col_right = st.columns([3, 2])
-
-        with col_left:
-            st.subheader("📌 Current Developer Mindshare")
-            fig_bar = px.bar(
-                filtered_tech.sort_values(by="repo_count", ascending=True),
+            st.subheader("Market Saturation & Growth Quadrant")
+            
+            growth_metrics = calculate_growth_metrics(filtered_time_series)
+            saturation_data = get_saturation_quadrant(growth_metrics, filtered_tech)
+            
+            fig_quadrant = px.scatter(
+                saturation_data,
                 x="repo_count",
-                y="tech_name",
-                color="category",
-                orientation="h",
-                log_x=use_log_scale,
-                labels={"tech_name": "", "repo_count": "Total Repositories", "category": "Category"},
-                text_auto=".2s",
-                color_discrete_sequence=px.colors.qualitative.Bold
+                y="mom_growth",
+                color="quadrant",
+                size="repo_count",
+                hover_name="tech_name",
+                hover_data={"repo_count": ":,", "mom_growth": ":.1f", "quadrant": False},
+                labels={"repo_count": "Repository Volume", "mom_growth": "Month-over-Month Growth (%)"},
+                color_discrete_map={
+                    "High Growth, High Volume (Explosive Demand)": "#da3633",
+                    "High Growth, Low Volume (Emerging Skill)": "#3fb950",
+                    "Low Growth, High Volume (Established Stacks)": "#58a6ff",
+                    "Low Growth, Low Volume (Specialized/Niche)": "#8b949e"
+                }
             )
-            fig_bar.update_layout(
+            
+            fig_quadrant.add_hline(y=saturation_data["mom_growth"].median(), line_dash="dash", line_color="rgba(255,255,255,0.2)", annotation_text="Growth Median")
+            fig_quadrant.add_vline(x=saturation_data["repo_count"].median(), line_dash="dash", line_color="rgba(255,255,255,0.2)", annotation_text="Volume Median")
+            
+            fig_quadrant.update_layout(
                 height=450,
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#f0f6fc"),
-                xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
-                margin=dict(l=0, r=0, t=10, b=0)
+                xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", type="log"),
+                yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+                margin=dict(l=0, r=0, t=30, b=0)
             )
-            st.plotly_chart(fig_bar, use_container_width=True)
+            
+            st.plotly_chart(fig_quadrant, use_container_width=True)
 
-        with col_right:
-            st.subheader("🍰 Category Share")
-            fig_pie = px.pie(
-                filtered_tech,
-                names="category",
-                values="repo_count",
-                hole=0.5,
-                color_discrete_sequence=px.colors.qualitative.Pastel
+            st.divider()
+
+            st.subheader("Adoption Trajectory Over Time")
+            
+            time_df = filtered_time_series.sort_values(by="snapshot_date").copy()
+
+            if chart_mode == "% Growth Since Baseline":
+                baselines = time_df.groupby("tech_name")["repo_count"].transform("first")
+                time_df["display_metric"] = ((time_df["repo_count"] - baselines) / baselines) * 100
+                y_axis_label = "Growth Velocity (%)"
+                title_text = "Relative Growth Velocity (% Change from Baseline)"
+            else:
+                time_df["display_metric"] = time_df["repo_count"]
+                y_axis_label = "Total Repositories"
+                title_text = "Repository Volume Timeline"
+
+            time_df["snapshot_date_str"] = time_df["snapshot_date"].astype(str)
+
+            fig_line = px.line(
+                time_df,
+                x="snapshot_date_str",
+                y="display_metric",
+                color="tech_name",
+                markers=True,
+                log_y=use_log_scale,
+                labels={"snapshot_date_str": "Date", "display_metric": y_axis_label, "tech_name": "Technology"},
+                title=title_text,
+                color_discrete_sequence=px.colors.qualitative.Bold
             )
-            fig_pie.update_layout(
-                height=450,
+
+            fig_line.update_layout(
+                height=420,
                 paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#f0f6fc"),
-                margin=dict(l=0, r=0, t=10, b=0)
+                xaxis=dict(type="category", showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+                yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+                margin=dict(l=0, r=0, t=30, b=0)
             )
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(fig_line, use_container_width=True)
 
-        st.divider()
+            st.divider()
 
-        # Data Table View
-        st.subheader("📋 Market Share Data Explorer")
-        table_df = filtered_tech.copy()
-        table_df["Ecosystem Share (%)"] = (table_df["repo_count"] / table_df["repo_count"].sum() * 100).round(2)
-        table_df = table_df.sort_values(by="repo_count", ascending=False)[
-            ["tech_name", "category", "repo_count", "Ecosystem Share (%)", "snapshot_date"]
-        ]
-        
-        st.dataframe(
-            table_df,
-            column_config={
-                "tech_name": "Technology Stack",
-                "category": "Category",
-                "repo_count": st.column_config.NumberColumn("Repository Count", format="%d"),
-                "Ecosystem Share (%)": st.column_config.ProgressColumn("Share in View", format="%.2f%%", min_value=0, max_value=100),
-                "snapshot_date": "Snapshot Date"
-            },
-            use_container_width=True,
-            hide_index=True
-        )
+            col_left, col_right = st.columns([3, 2])
+
+            with col_left:
+                st.subheader("Developer Mindshare Distribution")
+                fig_bar = px.bar(
+                    filtered_tech.sort_values(by="repo_count", ascending=True),
+                    x="repo_count",
+                    y="tech_name",
+                    color="category",
+                    orientation="h",
+                    log_x=use_log_scale,
+                    labels={"tech_name": "", "repo_count": "Total Repositories", "category": "Category"},
+                    text_auto=".2s",
+                    color_discrete_sequence=px.colors.qualitative.Bold
+                )
+                fig_bar.update_layout(
+                    height=450,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#f0f6fc"),
+                    xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+                    margin=dict(l=0, r=0, t=10, b=0)
+                )
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+            with col_right:
+                st.subheader("Category Share")
+                fig_pie = px.pie(
+                    filtered_tech,
+                    names="category",
+                    values="repo_count",
+                    hole=0.5,
+                    color_discrete_sequence=px.colors.qualitative.Pastel
+                )
+                fig_pie.update_layout(
+                    height=450,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="#f0f6fc"),
+                    margin=dict(l=0, r=0, t=10, b=0)
+                )
+                st.plotly_chart(fig_pie, use_container_width=True)
+
+            st.divider()
+
+            st.subheader("Market Share & Lifecycle Data Explorer")
+            
+            table_df = filtered_tech.copy()
+            table_df["Ecosystem Share (%)"] = (table_df["repo_count"] / table_df["repo_count"].sum() * 100).round(2)
+            
+            table_df = table_df.merge(growth_metrics[["tech_name", "mom_growth"]], on="tech_name", how="left")
+            table_df["mom_growth"] = table_df["mom_growth"].fillna(0)
+            
+            max_count = table_df["repo_count"].max()
+            table_df["Lifecycle Phase"] = table_df.apply(
+                lambda row: assign_maturity_phase(row["mom_growth"], row["repo_count"], max_count),
+                axis=1
+            )
+            
+            table_df["MoM Growth"] = table_df["mom_growth"].apply(lambda v: f"{'+' if v >= 0 else ''}{v:.1f}%")
+            
+            display_table = table_df.sort_values(by="repo_count", ascending=False)[
+                ["tech_name", "category", "repo_count", "Ecosystem Share (%)", "Lifecycle Phase", "MoM Growth", "snapshot_date"]
+            ]
+            
+            st.dataframe(
+                display_table,
+                column_config={
+                    "tech_name": "Technology Stack",
+                    "category": "Category",
+                    "repo_count": st.column_config.NumberColumn("Repository Count", format="%d"),
+                    "Ecosystem Share (%)": st.column_config.ProgressColumn("Share in View", format="%.2f%%", min_value=0, max_value=100),
+                    "Lifecycle Phase": "Maturity Phase",
+                    "MoM Growth": "Month-over-Month",
+                    "snapshot_date": "Snapshot Date"
+                },
+                use_container_width=True,
+                hide_index=True
+            )
 
 # ==========================================
 # TAB 2: DYNAMIC BREAKOUT REPOS
 # ==========================================
 with tab2:
-    st.subheader("🚀 Top Breakout & Emerging GitHub Projects")
-    st.markdown("High-velocity repositories created in the **last 30 days**, ranked by community star adoption.")
+    st.subheader("Emerging High-Velocity Repositories")
+    st.markdown("Repositories created within the last 30 days, sorted by community adoption speed.")
 
     if breakout_df.empty:
-        st.warning("⚠️ No breakout repo records found!")
+        st.warning("No breakout repository records available.")
     else:
         latest_breakout_date = breakout_df["snapshot_date"].max()
         latest_breakouts = breakout_df[breakout_df["snapshot_date"] == latest_breakout_date].copy()
 
+        st.subheader("Primary Language Prevalence in Breakout Repositories")
+        
+        combos_df = find_emerging_skill_combos(breakout_df, top_n=5)
+        
+        if not combos_df.empty:
+            col_combos_left, _ = st.columns([2, 1])
+            
+            with col_combos_left:
+                for idx, row in combos_df.iterrows():
+                    st.markdown(f"""
+                    <div class="insight-box">
+                        <strong>{row['combo']}</strong><br>
+                        {row['prevalence']} projects ({row['pct_of_top']:.0f}% of top breakout sample)
+                    </div>
+                    """, unsafe_allow_html=True)
+        
+        st.divider()
+
         col_top_left, col_top_right = st.columns([3, 2])
 
         with col_top_left:
-            st.markdown("##### 📌 Star vs. Fork Velocity")
+            st.markdown("##### Star vs. Fork Velocity")
             fig_scatter = px.scatter(
                 latest_breakouts,
                 x="stars",
@@ -291,7 +472,7 @@ with tab2:
                 color="primary_language",
                 hover_name="repo_name",
                 hover_data={"description": True, "stars": ":,", "forks": ":,"},
-                labels={"stars": "GitHub Stars ⭐", "forks": "Forks 🍴", "primary_language": "Language"},
+                labels={"stars": "GitHub Stars", "forks": "Forks", "primary_language": "Language"},
                 color_discrete_sequence=px.colors.qualitative.Bold
             )
             fig_scatter.update_layout(
@@ -306,7 +487,7 @@ with tab2:
             st.plotly_chart(fig_scatter, use_container_width=True)
 
         with col_top_right:
-            st.markdown("##### 🏆 Top 5 Fast-Rising Breakouts")
+            st.markdown("##### Top 5 Fast-Rising Repositories")
             top5_breakouts = latest_breakouts.sort_values(by="stars", ascending=True).tail(5)
             fig_top5 = px.bar(
                 top5_breakouts,
@@ -315,7 +496,7 @@ with tab2:
                 orientation="h",
                 color="primary_language",
                 text_auto=".2s",
-                labels={"stars": "Stars ⭐", "repo_name": ""}
+                labels={"stars": "Stars", "repo_name": ""}
             )
             fig_top5.update_layout(
                 height=420,
@@ -329,7 +510,7 @@ with tab2:
 
         st.divider()
 
-        st.subheader("⭐ Breakout Repository Explorer")
+        st.subheader("Breakout Repository Explorer")
         display_breakouts = latest_breakouts.sort_values(by="stars", ascending=False)[
             ["repo_name", "stars", "forks", "primary_language", "html_url", "description"]
         ]
@@ -338,10 +519,10 @@ with tab2:
             display_breakouts,
             column_config={
                 "repo_name": "Repository",
-                "stars": st.column_config.NumberColumn("Stars ⭐", format="%d"),
-                "forks": st.column_config.NumberColumn("Forks 🍴", format="%d"),
+                "stars": st.column_config.NumberColumn("Stars", format="%d"),
+                "forks": st.column_config.NumberColumn("Forks", format="%d"),
                 "primary_language": "Language",
-                "html_url": st.column_config.LinkColumn("GitHub Link", display_text="View ↗️"),
+                "html_url": st.column_config.LinkColumn("GitHub Link", display_text="View Link"),
                 "description": "Description"
             },
             use_container_width=True,

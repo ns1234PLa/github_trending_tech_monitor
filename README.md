@@ -30,7 +30,7 @@ An automated market intelligence platform that tracks open-source software adopt
                               (Triggers)
                                   v
   +------------------+   +--------------------------+   +-------------------+
-  |  GitHub REST API |--->| Python ETL Engine        |-->| Discord Webhook   |
+  |  GitHub REST API |-->| Python ETL Engine        |-->| Discord Webhook   |
   |  (Raw Telemetry) |   | (`fetch_github_data.py`) |   | (Daily Digest)    |
   +------------------+   +--------------------------+   +-------------------+
                                   |

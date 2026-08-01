@@ -4,9 +4,11 @@
 [![Database](https://img.shields.io/badge/Supabase-PostgreSQL-3FCF8E?style=for-the-badge&logo=supabase)](https://supabase.com)
 [![Dashboard](https://img.shields.io/badge/Streamlit-Analytics_UI-FF4B4B?style=for-the-badge&logo=streamlit)](https://streamlit.io)
 
-> **Status**: Fully automated ETL pipeline and database infrastructure operational. GitHub Actions executes daily with zero manual intervention. Streamlit dashboard under active UI/UX development.
-
 An automated market intelligence platform that tracks open-source software adoption, monitors technology stack trajectories, and uncovers emerging framework signals in real time using the GitHub REST API and Supabase PostgreSQL.
+ 
+### 🚀 [View Live Dashboard](https://apptrendingtechmonitor-tfwasbaavrm3aumejxfcj2.streamlit.app/)
+ 
+Explore market saturation quadrants, breakout repositories, and emerging technology signals interactively.
 
 ---
 

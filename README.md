@@ -12,6 +12,22 @@ Explore market saturation quadrants, breakout repositories, and emerging technol
 
 ---
 
+## Platform Preview
+
+###  Real-Time Telemetry & Market Saturation
+![Dashboard Overview](assets/dashboard_overview.png)
+
+###  Adoption Trajectory Over Time
+![Growth Velocity](assets/growth_velocity.png)
+
+###  Unsupervised Dynamic Topic Discovery
+![Emerging Topic Signals](assets/emerging_topics.png)
+
+###  Automated Daily Pipeline & Discord Digests
+![Discord Automated Digest](assets/discord_digest.png)
+
+---
+
 ## Key Capabilities
 
 - **Core Stack Telemetry** — Monitors aggregate repository volumes and adoption metrics across technology categories (Frameworks, Languages, Databases, AI/ML).
@@ -124,14 +140,20 @@ github_trending_tech_monitor/
 ├── .github/
 │   └── workflows/
 │       └── daily_ingestion.yml      # Scheduled ETL execution workflow
+├── assets/                     \
+│   ├── auto_discovered.png
+│   ├── dashboard_overview.png
+│   ├── discord_digest.png
+│   ├── emerging_topics.png
+│   └── growth_velocity.png
 ├── dashboard/
 │   └── app.py                       # Streamlit analytics interface
 ├── scripts/
 │   └── fetch_github_data.py         # Core ingestion and analysis pipeline
 ├── .env.example                     # Environment variable blueprint
-├── .gitignore                      
-├── README.md                       
-└── requirements.txt                
+├── .gitignore                       # Git exclusion rules
+├── README.md                        
+└── requirements.txt                               
 ```
 
 ---

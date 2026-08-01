@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from supabase import Client, create_client
 
 st.set_page_config(
-    page_title="TechPulse • GitHub Market Intelligence",
+    page_title="GitHub Trending Tech Monitor",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -201,7 +201,7 @@ def find_emerging_skill_combos(breakout_df, top_n=5):
     return pd.DataFrame(combos)
 
 
-st.title("TechPulse Market Intelligence")
+st.title("GitHub Trending Tech Monitor")
 st.markdown("Open-source telemetry tracking developer adoption, skill saturation, and framework growth trajectories.")
 
 tech_df = load_tech_trends()
@@ -591,12 +591,13 @@ with tab3:
             x="repo_count",
             y="avg_stars",
             size="avg_stars",
-            text="topic_name",
             hover_name="topic_name",
+            hover_data={"repo_count": True, "avg_stars": True},
             labels={"repo_count": "Number of Viral Repos Featuring Tag", "avg_stars": "Average Project Stars"},
             color="avg_stars",
             color_continuous_scale="Viridis"
         )
+        
         fig_topic_scatter.update_traces(textposition="top center")
         fig_topic_scatter.update_layout(
             height=450,

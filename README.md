@@ -6,7 +6,7 @@
 
 An automated market intelligence platform that tracks open-source software adoption, monitors technology stack trajectories, and uncovers emerging framework signals in real time using the GitHub REST API and Supabase PostgreSQL.
  
-### 🚀 [View Live Dashboard](https://apptrendingtechmonitor-tfwasbaavrm3aumejxfcj2.streamlit.app/)
+### 🚀 [View Live Dashboard](https://github-trending-tech-monitor.onrender.com)
  
 Explore market saturation quadrants, breakout repositories, and emerging technology signals interactively.
 

@@ -140,7 +140,7 @@ github_trending_tech_monitor/
 ├── .github/
 │   └── workflows/
 │       └── daily_ingestion.yml      # Scheduled ETL execution workflow
-├── assets/                     \
+├── assets/                     
 │   ├── auto_discovered.png
 │   ├── dashboard_overview.png
 │   ├── discord_digest.png

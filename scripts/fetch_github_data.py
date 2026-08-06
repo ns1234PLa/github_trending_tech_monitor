@@ -33,10 +33,25 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 TECH_STACKS: Dict[str, List[str]] = {
-    "Framework": ["React", "Vue", "Next.js", "FastAPI", "Django", "Flutter"],
-    "Language": ["Python", "TypeScript", "Rust", "Go", "Kotlin"],
-    "Database": ["PostgreSQL", "MongoDB", "Redis", "Supabase"],
-    "AI/ML": ["PyTorch", "TensorFlow", "LangChain", "XGBoost"],
+    "Framework": [
+        "React", "Vue", "Next.js", "FastAPI", "Django", 
+        "Flutter", "Svelte", "Astro"
+    ],
+    "Language": [
+        "Python", "TypeScript", "Go", "Rust", "Kotlin", 
+        "Zig", "Elixir", "Gleam", "Mojo", "Julia"
+    ],
+    "Database": [
+        "PostgreSQL", "MongoDB", "Redis", "DuckDB", 
+        "ClickHouse", "Neo4j", "SurrealDB"
+    ],
+    "AI/ML": [
+        "PyTorch", "TensorFlow", "XGBoost", "LangChain", 
+        "LlamaIndex", "vLLM", "Ollama", "ChromaDB", "Qdrant"
+    ],
+    "Cloud/DevOps": [
+        "Supabase", "Docker", "Kubernetes", "Terraform"
+    ],
 }
 
 # Generic topics to filter out during dynamic topic discovery

@@ -72,7 +72,14 @@ supabase = init_supabase()
 def load_tech_trends():
     """Fetch core tech stack metrics with date normalization."""
     try:
-        response = supabase.table("tech_trends").select("*").execute()
+        # Add .limit(10000) and order by snapshot_date
+        response = (
+            supabase.table("tech_trends")
+            .select("*")
+            .order("snapshot_date", desc=False)
+            .limit(10000)
+            .execute()
+        )
         if not response.data:
             return pd.DataFrame()
         df = pd.DataFrame(response.data)
@@ -92,7 +99,13 @@ def load_tech_trends():
 def load_breakout_repos():
     """Fetch breakout projects with date normalization."""
     try:
-        response = supabase.table("trending_repos").select("*").execute()
+        response = (
+            supabase.table("trending_repos")
+            .select("*")
+            .order("snapshot_date", desc=False)
+            .limit(10000)
+            .execute()
+        )
         if not response.data:
             return pd.DataFrame()
         df = pd.DataFrame(response.data)
@@ -106,7 +119,13 @@ def load_breakout_repos():
 def load_emerging_topics():
     """Fetch Pillar 3 dynamically harvested topics with date normalization."""
     try:
-        response = supabase.table("emerging_topics").select("*").execute()
+        response = (
+            supabase.table("emerging_topics")
+            .select("*")
+            .order("snapshot_date", desc=False)
+            .limit(10000)
+            .execute()
+        )
         if not response.data:
             return pd.DataFrame()
         df = pd.DataFrame(response.data)
@@ -115,7 +134,7 @@ def load_emerging_topics():
     except Exception as e:
         st.error(f"Error fetching emerging topics: {e}")
         return pd.DataFrame()
-
+    
 def calculate_growth_metrics(df):
     today = df["snapshot_date"].max()
     month_ago = today - timedelta(days=30)
@@ -326,7 +345,8 @@ with tab1:
 
             st.subheader("Adoption Trajectory Over Time")
             
-            time_df = filtered_time_series.sort_values(by="snapshot_date").copy()
+            time_df = filtered_time_series.sort_values(by=["tech_name", "snapshot_date"]).copy()
+            time_df["snapshot_date"] = pd.to_datetime(time_df["snapshot_date"])
 
             if chart_mode == "% Growth Since Baseline":
                 baselines = time_df.groupby("tech_name")["repo_count"].transform("first")
@@ -338,16 +358,16 @@ with tab1:
                 y_axis_label = "Total Repositories"
                 title_text = "Repository Volume Timeline"
 
-            time_df["snapshot_date_str"] = time_df["snapshot_date"].astype(str)
+            time_df = time_df.sort_values(by="snapshot_date")
 
             fig_line = px.line(
                 time_df,
-                x="snapshot_date_str",
+                x="snapshot_date",
                 y="display_metric",
                 color="tech_name",
                 markers=True,
                 log_y=use_log_scale,
-                labels={"snapshot_date_str": "Date", "display_metric": y_axis_label, "tech_name": "Technology"},
+                labels={"snapshot_date": "Date", "display_metric": y_axis_label, "tech_name": "Technology"},
                 title=title_text,
                 color_discrete_sequence=px.colors.qualitative.Bold
             )
@@ -357,7 +377,14 @@ with tab1:
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#f0f6fc"),
-                xaxis=dict(type="category", showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+                hovermode="x unified",
+                xaxis=dict(
+                    type="date",
+                    tickformat="%b %d",
+                    dtick=86400000 * 4,  # Tick every 4 days
+                    showgrid=True,
+                    gridcolor="rgba(255,255,255,0.05)"
+                ),
                 yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
                 margin=dict(l=0, r=0, t=30, b=0)
             )

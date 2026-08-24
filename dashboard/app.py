@@ -70,19 +70,31 @@ supabase = init_supabase()
 
 @st.cache_data(ttl=1800)
 def load_tech_trends():
-    """Fetch core tech stack metrics with date normalization."""
+    """Fetch core tech stack metrics with full pagination."""
     try:
-        # Add .limit(10000) and order by snapshot_date
-        response = (
-            supabase.table("tech_trends")
-            .select("*")
-            .order("snapshot_date", desc=False)
-            .limit(10000)
-            .execute()
-        )
-        if not response.data:
+        all_data = []
+        page_size = 1000
+        start = 0
+
+        while True:
+            response = (
+                supabase.table("tech_trends")
+                .select("*")
+                .order("snapshot_date", desc=False)
+                .range(start, start + page_size - 1)
+                .execute()
+            )
+            if not response.data:
+                break
+            all_data.extend(response.data)
+            if len(response.data) < page_size:
+                break
+            start += page_size
+
+        if not all_data:
             return pd.DataFrame()
-        df = pd.DataFrame(response.data)
+
+        df = pd.DataFrame(all_data)
         df["snapshot_date"] = pd.to_datetime(df["snapshot_date"]).dt.date
         
         if "created_at" in df.columns:
@@ -94,21 +106,34 @@ def load_tech_trends():
     except Exception as e:
         st.error(f"Error fetching telemetry data: {e}")
         return pd.DataFrame()
-
+    
 @st.cache_data(ttl=1800)
 def load_breakout_repos():
-    """Fetch breakout projects with date normalization."""
+    """Fetch breakout projects with full pagination."""
     try:
-        response = (
-            supabase.table("trending_repos")
-            .select("*")
-            .order("snapshot_date", desc=False)
-            .limit(10000)
-            .execute()
-        )
-        if not response.data:
+        all_data = []
+        page_size = 1000
+        start = 0
+
+        while True:
+            response = (
+                supabase.table("trending_repos")
+                .select("*")
+                .order("snapshot_date", desc=False)
+                .range(start, start + page_size - 1)
+                .execute()
+            )
+            if not response.data:
+                break
+            all_data.extend(response.data)
+            if len(response.data) < page_size:
+                break
+            start += page_size
+
+        if not all_data:
             return pd.DataFrame()
-        df = pd.DataFrame(response.data)
+
+        df = pd.DataFrame(all_data)
         df["snapshot_date"] = pd.to_datetime(df["snapshot_date"]).dt.date
         return df
     except Exception as e:
@@ -117,24 +142,37 @@ def load_breakout_repos():
 
 @st.cache_data(ttl=1800)
 def load_emerging_topics():
-    """Fetch Pillar 3 dynamically harvested topics with date normalization."""
+    """Fetch Pillar 3 dynamically harvested topics with full pagination."""
     try:
-        response = (
-            supabase.table("emerging_topics")
-            .select("*")
-            .order("snapshot_date", desc=False)
-            .limit(10000)
-            .execute()
-        )
-        if not response.data:
+        all_data = []
+        page_size = 1000
+        start = 0
+
+        while True:
+            response = (
+                supabase.table("emerging_topics")
+                .select("*")
+                .order("snapshot_date", desc=False)
+                .range(start, start + page_size - 1)
+                .execute()
+            )
+            if not response.data:
+                break
+            all_data.extend(response.data)
+            if len(response.data) < page_size:
+                break
+            start += page_size
+
+        if not all_data:
             return pd.DataFrame()
-        df = pd.DataFrame(response.data)
+
+        df = pd.DataFrame(all_data)
         df["snapshot_date"] = pd.to_datetime(df["snapshot_date"]).dt.date
         return df
     except Exception as e:
         st.error(f"Error fetching emerging topics: {e}")
         return pd.DataFrame()
-    
+        
 def calculate_growth_metrics(df):
     today = df["snapshot_date"].max()
     month_ago = today - timedelta(days=30)

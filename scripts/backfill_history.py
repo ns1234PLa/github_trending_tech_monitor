@@ -26,7 +26,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Define full tech stacks matching your ETL
+# Target ecosystem taxonomy
 TECH_STACKS: Dict[str, List[str]] = {
     "Framework": ["React", "Vue", "Next.js", "FastAPI", "Django", "Flutter", "Svelte", "Astro"],
     "Language": ["Python", "TypeScript", "Go", "Rust", "Kotlin", "Zig", "Elixir", "Gleam", "Mojo", "Julia"],
@@ -55,7 +55,7 @@ def run_backfill(start_date_str: str, end_date_str: str):
 
         for category, techs in TECH_STACKS.items():
             for tech in techs:
-                # Query cumulative repositories created on or before this historical date
+                # Cumulative repository query up to snapshot date
                 query = f"{tech} created:<={date_str}"
                 url = f"https://api.github.com/search/repositories?q={query}"
 
@@ -78,7 +78,7 @@ def run_backfill(start_date_str: str, end_date_str: str):
                 except Exception as exc:
                     logger.error(f"Failed request for {tech}: {exc}")
 
-                # Stay well within GitHub Search API rate limits (30 req/min with token)
+                # Stays within GitHub Search API rate limits (30 req/min with token)
                 time.sleep(2.0)
 
         if records:
